@@ -111,7 +111,7 @@ class WordCloudArchitect:
                     f"NLTK language '{self.language_lower}' unavailable: {e}"
                 )
 
-        # 2. Add comprehensive Japanese structural stopwords (Resources Restored)
+        # 2. Add comprehensive Japanese structural stopwords
         if self.language_lower == "japanese":
             master_set.update(
                 {

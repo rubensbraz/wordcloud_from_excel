@@ -47,13 +47,11 @@ graph TD
 
 ```text
 wordcloud_from_excel/
-├── input/                     # Source Data
-│   ├── your_database.xlsx     # Source Excel files
-│   └── stopwords.txt          # Custom filter list (UTF-8)
-├── output/                    # Generated clouds and reports
-├── venv/                      # Python virtual environment
-├── generate_wordcloud.py      # Core Logic
-├── requirements.txt           # Project dependencies
+├── input/                     # Source Data (Excel & Stopwords)
+├── output/                    # Generated PNGs and Reports
+├── venv/                      # Python Virtual Environment
+├── generate_wordcloud.py      # Core Engine & Config
+├── requirements.txt           # Project Dependencies
 └── README.md                  # Documentation
 ```
 
