@@ -1,6 +1,5 @@
-import os
-import re
 import logging
+import re
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +13,8 @@ from janome.tokenizer import Tokenizer
 from matplotlib import font_manager
 from nltk.corpus import stopwords
 
-# --- CONFIGURATION LOGGING ---
+
+# --- LOGGING CONFIGURATION ---
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -23,18 +23,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# --- WORDCLOUD CONFIGURATION ---
 @dataclass
 class CloudConfig:
     """Configuration schema for WordCloud generation.
 
     Attributes:
-        language: Target language for NLP processing.
-        font_path: Path to the .ttf or .ttc font file.
+        language: Target language for NLP (e.g., 'english', 'japanese', 'portuguese').
+        font_path: Absolute path to a CJK-supported font file (.ttf, .ttc).
         colormap: Matplotlib colormap theme (e.g., 'viridis', 'plasma', 'magma').
-        width: Image width in pixels.
-        height: Image height in pixels.
-        max_words: Limit of words in the cloud.
-        background_color: Canvas color.
+        width: Image width in pixels for high-definition output.
+        height: Image height in pixels for high-definition output.
+        max_words: Maximum number of words to display in the cloud.
+        background_color: Background color for the generated image.
+        stopword_file: Optional path to an external .txt file with custom stopwords.
     """
 
     language: str = "english"
@@ -42,128 +44,174 @@ class CloudConfig:
     colormap: str = "viridis"
     width: int = 1920
     height: int = 1080
-    max_words: int = 100
+    max_words: int = 150
     background_color: str = "white"
     stopword_file: Optional[str] = None
 
 
+# --- WORDCLOUD GENERATOR ---
 class WordCloudArchitect:
-    """High-performance engine for multilingual WordCloud synthesis."""
+    """A professional engine to generate high-quality Word Clouds from Excel data.
+
+    This class orchestrates the entire flow from morphological analysis to
+    high-fidelity visual rendering, supporting multilingual environments.
+    """
 
     def __init__(self, config: CloudConfig):
-        """Initializes the architect with a configuration object.
+        """Initializes the architect with configuration and NLP engines.
 
         Args:
-            config: An instance of CloudConfig with all parameters.
+            config: An instance of CloudConfig containing all environment settings.
         """
         self.config = config
-        self.tokenizer_jp = (
-            Tokenizer() if config.language.lower() == "japanese" else None
-        )
+        self.language_lower = config.language.lower()
+        self.tokenizer_jp = Tokenizer() if self.language_lower == "japanese" else None
 
-        # Ensure NLTK resources are available
-        self._prepare_nltk()
+        # Ensure all necessary NLP resources are available
+        self._ensure_nltk_resources()
 
-        # Build optimized stopword cache
+        # Verify and handle font accessibility
+        self._validate_font_assets()
+
+        # Build the master set of filtered terms
         self.stop_set = self._initialize_stopwords()
 
-    def _prepare_nltk(self) -> None:
-        """Downloads necessary NLTK corpora safely."""
+    def _ensure_nltk_resources(self) -> None:
+        """Safely verifies and downloads NLTK stopword corpora."""
         try:
             nltk.data.find("corpora/stopwords")
         except LookupError:
-            logger.info("Downloading NLTK stopwords...")
+            logger.info("NLTK stopwords not found. Downloading...")
             nltk.download("stopwords", quiet=True)
 
+    def _validate_font_assets(self) -> None:
+        """Ensures the font path exists or falls back to system defaults."""
+        font_p = Path(self.config.font_path)
+        if not font_p.exists():
+            fallback = font_manager.findfont(font_manager.FontProperties())
+            logger.warning(
+                f"Font not found at {self.config.font_path}. Falling back to: {fallback}"
+            )
+            self.config.font_path = fallback
+
     def _initialize_stopwords(self) -> Set[str]:
-        """Merges multiple stopword sources into a high-speed lookup set.
+        """Combines NLTK, Japanese structural, and external stopwords.
 
         Returns:
-            A set of strings containing all filtered words.
+            Set[str]: A unified, high-speed lookup set for word filtering.
         """
         master_set = set()
-        lang = self.config.language.lower()
 
-        # 1. NLTK Base
-        if lang != "japanese":
+        # 1. Load NLTK stopwords for Western languages
+        if self.language_lower != "japanese":
             try:
-                master_set.update(stopwords.words(lang))
+                master_set.update(stopwords.words(self.language_lower))
             except Exception as e:
                 logger.warning(
-                    f"NLTK language '{lang}' not found. Using default. Error: {e}"
+                    f"NLTK language '{self.language_lower}' unavailable: {e}"
                 )
 
-        # 2. Hardcoded Japanese structural noise
-        if lang == "japanese":
+        # 2. Add comprehensive Japanese structural stopwords (Resources Restored)
+        if self.language_lower == "japanese":
             master_set.update(
-                {"する", "ある", "いる", "これ", "それ", "もの", "こと", "とき"}
+                {
+                    "する",
+                    "ある",
+                    "いる",
+                    "これ",
+                    "それ",
+                    "あれ",
+                    "どの",
+                    "もの",
+                    "こと",
+                    "とき",
+                    "よう",
+                    "ほう",
+                    "ため",
+                    "から",
+                    "まで",
+                    "だけ",
+                    "ほど",
+                    "ばかり",
+                    "なっ",
+                    "でき",
+                    "あり",
+                    "いっ",
+                    "おり",
+                    "れる",
+                    "られる",
+                    "など",
+                    "ため",
+                }
             )
 
-        # 3. External File
+        # 3. Incorporate external custom file if provided
         if self.config.stopword_file:
             path = Path(self.config.stopword_file)
             if path.exists():
-                with open(path, "r", encoding="utf-8") as f:
-                    master_set.update(
-                        {line.strip().lower() for line in f if line.strip()}
-                    )
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        master_set.update(
+                            {line.strip().lower() for line in f if line.strip()}
+                        )
+                except Exception as e:
+                    logger.error(f"Error reading external stopword file: {e}")
             else:
-                logger.error(f"Stopword file not found at: {path}")
+                logger.error(f"Stopword file path does not exist: {path}")
 
         return master_set
 
     def tokenize(self, text: str) -> List[str]:
-        """Performs morphological analysis or regex tokenization.
+        """Segments raw text into semantically relevant tokens.
 
         Args:
-            text: Raw input string.
+            text: Raw input string from the data source.
 
         Returns:
-            List of processed tokens (nouns/adjectives).
+            List[str]: Cleaned tokens filtered by POS and stopwords.
         """
         if not isinstance(text, str) or not text.strip():
             return []
 
-        # Sanitize basic noise
-        text = text.lower()
+        # Japanese Morphological Analysis
+        if self.language_lower == "japanese":
+            tokens = self.tokenizer_jp.tokenize(text.lower())
+            words = []
+            for token in tokens:
+                pos = token.part_of_speech.split(",")[0]
+                surface = token.surface.lower()
+                # Extract only Nouns and Adjectives to ensure high-quality clouds
+                if pos in ["名詞", "形容詞"] and surface not in self.stop_set:
+                    if len(surface) > 1 and not surface.isdigit():
+                        words.append(surface)
+            return words
 
-        if self.config.language.lower() == "japanese":
-            tokens = self.tokenizer_jp.tokenize(text)
-            return [
-                t.surface
-                for t in tokens
-                if t.part_of_speech.split(",")[0] in ["名詞", "形容詞"]
-                and t.surface not in self.stop_set
-                and len(t.surface) > 1
-            ]
-
-        # Western Tokenization
-        words = re.findall(r"\b\w+\b", text)
+        # Western Regex-based Tokenization
+        raw_words = re.findall(r"\b\w+\b", text.lower())
         return [
             w
-            for w in words
+            for w in raw_words
             if w not in self.stop_set and not w.isdigit() and len(w) > 1
         ]
 
     def generate_cloud(
         self, word_freq: Dict[str, int], title: str, output_path: Path
     ) -> None:
-        """Renders the final visualization with error handling.
+        """Renders the Word Cloud and saves it with professional resolution.
 
         Args:
-            word_freq: Frequency mapping of tokens.
-            title: Title to be displayed on the plot.
-            output_path: Destination Path object for the PNG.
+            word_freq: Dictionary mapping words to their frequencies.
+            title: Title text to display above the Word Cloud.
+            output_path: Full Path object where the .png will be saved.
         """
         try:
             if not word_freq:
-                logger.warning(f"No data available for: {title}")
+                logger.warning(
+                    f"Skipping visualization for '{title}': Empty frequency data."
+                )
                 return
 
-            if not Path(self.config.font_path).exists():
-                raise FileNotFoundError(f"Font missing: {self.config.font_path}")
-
-            # WordCloud Object Configuration
+            # Build the cloud with user configuration
             wc = WordCloud(
                 width=self.config.width,
                 height=self.config.height,
@@ -176,90 +224,105 @@ class WordCloudArchitect:
             ).generate_from_frequencies(word_freq)
 
             # Matplotlib Rendering
-            plt.figure(figsize=(20, 10))
+            plt.figure(figsize=(16, 9))
             plt.imshow(wc, interpolation="bilinear")
 
-            # Font Support for Title (CJK)
+            # Use specific font properties for CJK titles
             font_prop = font_manager.FontProperties(fname=self.config.font_path)
-            plt.title(title, fontproperties=font_prop, fontsize=30, pad=30)
+            plt.title(title, fontproperties=font_prop, fontsize=28, pad=25)
             plt.axis("off")
 
-            # Save with high DPI for print quality
+            # Save with 300 DPI for print/presentation quality
             plt.savefig(output_path, bbox_inches="tight", dpi=300)
             plt.close()
-            logger.info(f"Visual exported successfully: {output_path.name}")
+            logger.info(f"Cloud generated successfully: {output_path.name}")
 
         except Exception as e:
-            logger.error(f"Critical rendering error for {title}: {e}")
+            logger.error(f"Failed to generate cloud for {title}: {e}")
 
     def run_pipeline(
         self, input_file: str, sheet: str, text_col: str, key_col: str, output_dir: str
-    ):
-        """Executes the end-to-end extraction and visualization flow.
+    ) -> None:
+        """Orchestrates the full data pipeline from Excel to Visual Report.
 
         Args:
-            input_file: Source Excel path.
-            sheet: Target worksheet name.
-            text_col: Column containing textual data.
-            key_col: Column for segmentation/category.
-            output_dir: Target folder for artifacts.
+            input_file: Path to the source .xlsx file.
+            sheet: Name of the worksheet.
+            text_col: Column name containing raw text.
+            key_col: Column name for categorization.
+            output_dir: Folder path for results.
         """
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
 
         try:
+            # Load and validate Excel data
             df = pd.read_excel(input_file, sheet_name=sheet)
-            logger.info(f"Source loaded: {len(df)} rows found.")
+
+            # Check if columns exist before processing
+            required_cols = {text_col, key_col}
+            if not required_cols.issubset(df.columns):
+                missing = required_cols - set(df.columns)
+                raise ValueError(f"Required columns missing in Excel: {missing}")
+
+            logger.info(f"Data source loaded. Processing {len(df)} records.")
         except Exception as e:
-            logger.error(f"Failed to load Excel: {e}")
+            logger.error(f"Critical error loading data source: {e}")
             return
 
-        report_data = []
+        all_statistics = []
         unique_keys = df[key_col].dropna().unique()
 
+        # Iterate through unique segments
         for key in unique_keys:
             logger.info(f"Processing segment: {key}")
             subset = df[df[key_col] == key]
+
+            # Clean text by removing NaN and joining
             combined_text = " ".join(subset[text_col].dropna().astype(str))
 
-            tokens = self.tokenize(combined_text)
-            counts = Counter(tokens)
+            # Tokenize and count
+            words = self.tokenize(combined_text)
+            counts = Counter(words)
 
-            # Statistical data for Excel report
+            # Accumulate data for the statistical report
             for word, freq in counts.most_common(300):
-                report_data.append({"Category": key, "Term": word, "Frequency": freq})
+                all_statistics.append(
+                    {"Category": key, "Word": word, "Frequency": freq}
+                )
 
-            # Image generation
+            # Filename sanitization and cloud generation
             safe_name = re.sub(r'[\\/*?:"<>|]', "", str(key))
-            img_file = out_path / f"cloud_{safe_name}.png"
-            self.generate_cloud(dict(counts), f"Analysis: {key}", img_file)
+            img_file_path = out_path / f"cloud_{safe_name}.png"
+            self.generate_cloud(dict(counts), f"Keyword: {key}", img_file_path)
 
-        # Export Excel Report
+        # Export consolidated statistical Excel report
         try:
-            report_df = pd.DataFrame(report_data)
-            report_df.to_excel(out_path / "statistical_report.xlsx", index=False)
-            logger.info("Pipeline complete. All artifacts saved.")
+            report_path = out_path / "analysis_report.xlsx"
+            pd.DataFrame(all_statistics).to_excel(report_path, index=False)
+            logger.info(f"Report exported: {report_path}")
+            logger.info(f"[COMPLETED] All files saved in: '{output_dir}'")
         except Exception as e:
-            logger.error(f"Failed to save statistical report: {e}")
+            logger.error(f"Failed to export statistical report: {e}")
 
 
-# --- EXECUTION BLOCK ---
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    # 1. Define the "Theme" and Visual Settings
-    # Matplotlib Colormaps: 'viridis', 'magma', 'inferno', 'plasma', 'coolwarm', 'Spectral', etc
-    my_config = CloudConfig(
+    # Theme configuration: Swap 'colormap' to 'magma', 'plasma', 'Spectral', etc
+    # Supported languages: 'english', 'japanese', 'portuguese', 'spanish', 'french', etc
+    wordcloud_config = CloudConfig(
         language="english",
-        colormap="plasma",  # Change this to any Matplotlib theme
+        colormap="viridis",
         width=1920,
         height=1080,
-        max_words=150,
+        max_words=100,
         stopword_file="input/stopwords_en.txt",
     )
 
-    # 2. Initialize Architect
-    architect = WordCloudArchitect(config=my_config)
+    # Initialize the architect
+    architect = WordCloudArchitect(config=wordcloud_config)
 
-    # 3. Execute
+    # Run the pipeline
     architect.run_pipeline(
         input_file="input/Textual analysis Gardens.xlsx",
         sheet="Database",
