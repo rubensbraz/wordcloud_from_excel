@@ -1,0 +1,12 @@
+# Data Manipulation
+pandas>=2.2.0
+openpyxl==3.1.2
+pyarrow>=14.0.0
+
+# WordCloud and Visualization
+wordcloud==1.9.3
+matplotlib==3.8.2
+numpy==1.26.3
+
+# Japanese Morphological Analysis
+janome==0.5.0
