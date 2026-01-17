@@ -9,8 +9,13 @@ The core challenge of Japanese text—the lack of spaces between words—is hand
 ### 🖼️ System Preview
 
 <div align="center">
-  <img src="output/cloud_ガーデニング.png" alt="Gardening WordCloud" width="800">
-  <p><em>Example of a high-definition output for the "Gardening" keyword.</em></p>
+  <img src="output/cloud_ガーデニング.png" alt="Japanese Gardening WordCloud" width="800">
+  <p><em>Japanese Example of a high-definition output for the "ガーデニング" keyword.</em></p>
+</div>
+
+<div align="center">
+  <img src="output/cloud_gardening.png" alt="English Gardening WordCloud" width="800">
+  <p><em>English Example of a high-definition output for the "Gardening" keyword.</em></p>
 </div>
 
 ---
